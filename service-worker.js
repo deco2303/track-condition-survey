@@ -1,37 +1,34 @@
 const CACHE_NAME = 'track-survey-v1';
-const OFFLINE_URL = 'track_survey.html';
-const ASSETS_TO_CACHE = [
-  OFFLINE_URL,
+const ASSETS = [
+  'index.html',
   'manifest.json',
+  'service-worker.js',
   'icon-192.png',
   'icon-512.png'
-  // add any other assets (e.g. CSS, additional JS files) here
 ];
 
-self.addEventListener('install', event => {
-  event.waitUntil(
+self.addEventListener('install', evt => {
+  evt.waitUntil(
     caches.open(CACHE_NAME)
-      .then(cache => cache.addAll(ASSETS_TO_CACHE))
+      .then(cache => cache.addAll(ASSETS))
       .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener('activate', event => {
-  // Clean up old caches if you bump CACHE_NAME
-  event.waitUntil(
+self.addEventListener('activate', evt => {
+  evt.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.map(key => {
         if (key !== CACHE_NAME) return caches.delete(key);
       }))
     )
   );
+  self.clients.claim();
 });
 
-self.addEventListener('fetch', event => {
-  // Always try network first, fallback to cache
-  event.respondWith(
-    fetch(event.request).catch(() =>
-      caches.match(event.request).then(resp => resp || caches.match(OFFLINE_URL))
-    )
+self.addEventListener('fetch', evt => {
+  evt.respondWith(
+    fetch(evt.request)
+      .catch(() => caches.match(evt.request).then(r => r || caches.match('index.html')))
   );
 });

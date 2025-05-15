@@ -1,7 +1,7 @@
 {
-  "name": "Track Survey Logger",
-  "short_name": "TrackLogger",
-  "start_url": "track_survey.html",
+  "name": "Track Condition Survey Logger",
+  "short_name": "TCS Logger",
+  "start_url": "index.html",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#90CAF9",

@@ -4,6 +4,13 @@
   <meta charset="UTF-8">
   <title>Track Condition Survey Logger</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- PWA manifest and iOS support -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="apple-touch-icon" href="icon-192.png">
+
   <style>
     body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
     header { background: #90CAF9; padding: 12px; text-align: center; font-size: 1.2em; }
@@ -28,13 +35,30 @@
     #sketchContainer { overflow-x: auto; border: 1px solid #ccc; margin-top: 10px; }
     #sketch { background: #fff; display: block; }
   </style>
+
+  <script>
+    // Register service worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .catch(err => console.warn('SW registration failed:', err));
+      });
+    }
+  </script>
 </head>
 <body>
 
   <header>Track Condition Survey Logger</header>
 
-  <!-- Start Page -->
-  <div id="startPage" class="page active">
+  <!-- Home chooser -->
+  <div id="homePage" class="page active">
+    <h2>Welcome</h2>
+    <button class="btn" onclick="newSurvey()">🆕 New Survey</button>
+    <button class="btn" onclick="loadSurvey()">📂 Load Existing Survey</button>
+  </div>
+
+  <!-- Survey Details -->
+  <div id="startPage" class="page">
     <h2>Survey Details</h2>
     <label>Units
       <select id="unitSelect">
@@ -57,7 +81,7 @@
     <button class="btn" onclick="startSurvey()">Start Survey</button>
   </div>
 
-  <!-- Logging Options -->
+  <!-- Logging Menu -->
   <div id="logOptions" class="page">
     <h2>Survey Logging</h2>
     <button class="btn" onclick="showPage('runningRailsPage')">Log Running Rails</button>
@@ -65,27 +89,22 @@
     <button class="btn" onclick="showPage('sleeperPage')">Log Sleeper</button>
     <button class="btn" onclick="showPage('featurePage')">Log Feature</button>
     <button class="btn" onclick="showPage('sketchPage')">View Sketch</button>
-    <!-- New export buttons -->
     <button class="btn" onclick="exportData()">Export Data as CSV</button>
     <button class="btn" onclick="downloadSketchImage()">Download Sketch Image</button>
-    <button class="btn" onclick="confirmClose()">Close and Save Survey</button>
+    <button class="btn" onclick="saveAndExit()">💾 Save & Exit to Home</button>
   </div>
 
-  <!-- Running Rails Logging -->
+  <!-- Running Rails -->
   <div id="runningRailsPage" class="page">
     <h2>Running Rails</h2>
     <label>Position
       <select id="runningPos">
-        <option>CESS</option>
-        <option>6ft</option>
-        <option>Both</option>
+        <option>CESS</option><option>6ft</option><option>Both</option>
       </select>
     </label>
     <label>Section
       <select id="runningSection">
-        <option>Flat Bottom</option>
-        <option>Bull Head</option>
-        <option>Grooved</option>
+        <option>Flat Bottom</option><option>Bull Head</option><option>Grooved</option>
       </select>
     </label>
     <label>Type
@@ -107,14 +126,12 @@
     <button class="btn" onclick="showPage('logOptions')">Back</button>
   </div>
 
-  <!-- Other Rails Logging -->
+  <!-- Other Rails -->
   <div id="otherRailsPage" class="page">
     <h2>Other Rails</h2>
     <label>Rail
       <select id="otherRailSelect">
-        <option>Guard Rail</option>
-        <option>Check Rail</option>
-        <option>Third Rail</option>
+        <option>Guard Rail</option><option>Check Rail</option><option>Third Rail</option>
       </select>
     </label>
     <label>Description<textarea id="otherRailDesc" rows="3"></textarea></label>
@@ -131,7 +148,7 @@
     <button class="btn" onclick="showPage('logOptions')">Back</button>
   </div>
 
-  <!-- Sleeper Logging -->
+  <!-- Sleeper -->
   <div id="sleeperPage" class="page">
     <h2>Sleeper Type</h2>
     <label>Type
@@ -150,7 +167,7 @@
     <button class="btn" onclick="showPage('logOptions')">Back</button>
   </div>
 
-  <!-- Feature Logging -->
+  <!-- Feature -->
   <div id="featurePage" class="page">
     <h2>Log Feature</h2>
     <label>Category
@@ -210,7 +227,7 @@
     <button class="btn" onclick="showPage('logOptions')">Back</button>
   </div>
 
-  <!-- Sketch Page -->
+  <!-- Sketch -->
   <div id="sketchPage" class="page">
     <h2>Survey Sketch</h2>
     <button class="btn" onclick="showPage('logOptions')">Back</button>
@@ -224,182 +241,209 @@
   </div>
 
   <script>
-    let survey = { info: {}, logs: [] };
+    // In-memory + persisted survey
+    let survey = { info:{}, logs:[] };
+    if (localStorage.getItem('trackSurveyData')) {
+      try { survey = JSON.parse(localStorage.getItem('trackSurveyData')); }
+      catch(e){ console.warn('Corrupt save, starting fresh'); }
+    }
 
-    function showPage(id) {
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    // Page navigation
+    function showPage(id){
+      document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
       document.getElementById(id).classList.add('active');
     }
 
-    function startSurvey() {
-      const km1 = parseFloat(document.getElementById('startKm').value)||0,
-            m1  = parseFloat(document.getElementById('startM').value)||0,
-            km2 = parseFloat(document.getElementById('endKm').value)||0,
-            m2  = parseFloat(document.getElementById('endM').value)||0;
+    // Home actions
+    function newSurvey(){
+      localStorage.removeItem('trackSurveyData');
+      survey = { info:{}, logs:[] };
+      showPage('startPage');
+    }
+    function loadSurvey(){
+      showPage('logOptions');
+    }
+
+    // Persist helper
+    function saveSurvey(){
+      localStorage.setItem('trackSurveyData', JSON.stringify(survey));
+    }
+
+    // Start survey
+    function startSurvey(){
+      const km1 = +document.getElementById('startKm').value||0,
+            m1  = +document.getElementById('startM').value||0,
+            km2 = +document.getElementById('endKm').value||0,
+            m2  = +document.getElementById('endM').value||0;
       survey.info = {
-        units: document.getElementById('unitSelect').value,
-        project: document.getElementById('projName').value,
-        elr: document.getElementById('elr').value,
-        trackId: document.getElementById('trackId').value,
-        surveyName: document.getElementById('surveyName').value,
-        start: km1*1000 + m1,
-        end:   km2*1000 + m2
+        units:document.getElementById('unitSelect').value,
+        project:document.getElementById('projName').value,
+        elr:document.getElementById('elr').value,
+        trackId:document.getElementById('trackId').value,
+        surveyName:document.getElementById('surveyName').value,
+        start:km1*1000+m1, end:km2*1000+m2
       };
-      survey.logs = [];
+      saveSurvey();
       showPage('logOptions');
     }
 
-    function storeRunningRails() {
-      const km = parseFloat(document.getElementById('runKm').value)||0,
-            m  = parseFloat(document.getElementById('runM').value)||0;
+    // Store entries
+    function storeRunningRails(){
+      const km=+document.getElementById('runKm').value||0,
+            m=+document.getElementById('runM').value||0;
       survey.logs.push({
-        category: 'runningRails',
-        pos:      document.getElementById('runningPos').value,
-        section:  document.getElementById('runningSection').value,
-        type:     document.getElementById('runningType').value,
-        comments: document.getElementById('runningComments').value,
-        chainage: km*1000 + m
+        category:'runningRails',
+        pos:document.getElementById('runningPos').value,
+        section:document.getElementById('runningSection').value,
+        type:document.getElementById('runningType').value,
+        comments:document.getElementById('runningComments').value,
+        chainage:km*1000+m
       });
-      drawSketch();
-      showPage('logOptions');
+      saveSurvey(); drawSketch(); showPage('logOptions');
     }
-
-    function storeOtherRails() {
-      const km = parseFloat(document.getElementById('otherKm').value)||0,
-            m  = parseFloat(document.getElementById('otherM').value)||0;
+    function storeOtherRails(){
+      const km=+document.getElementById('otherKm').value||0,
+            m=+document.getElementById('otherM').value||0;
       survey.logs.push({
-        category: 'otherRails',
-        rail:     document.getElementById('otherRailSelect').value,
-        desc:     document.getElementById('otherRailDesc').value,
-        pos:      document.getElementById('otherRailPos').value,
-        chainage: km*1000 + m
+        category:'otherRails',
+        rail:document.getElementById('otherRailSelect').value,
+        desc:document.getElementById('otherRailDesc').value,
+        pos:document.getElementById('otherRailPos').value,
+        chainage:km*1000+m
       });
-      drawSketch();
-      showPage('logOptions');
+      saveSurvey(); drawSketch(); showPage('logOptions');
     }
-
-    function storeSleeper() {
-      const km = parseFloat(document.getElementById('sleepKm').value)||0,
-            m  = parseFloat(document.getElementById('sleepM').value)||0;
+    function storeSleeper(){
+      const km=+document.getElementById('sleepKm').value||0,
+            m=+document.getElementById('sleepM').value||0;
       survey.logs.push({
-        category:        'sleeper',
-        type:            document.getElementById('sleeperType').value,
-        generalComments: document.getElementById('sleeperComments').value,
-        baseComments:    document.getElementById('baseplateComments').value,
-        clipComments:    document.getElementById('clipComments').value,
-        chainage:        km*1000 + m
+        category:'sleeper',
+        type:document.getElementById('sleeperType').value,
+        generalComments:document.getElementById('sleeperComments').value,
+        baseComments:document.getElementById('baseplateComments').value,
+        clipComments:document.getElementById('clipComments').value,
+        chainage:km*1000+m
       });
-      drawSketch();
-      showPage('logOptions');
+      saveSurvey(); drawSketch(); showPage('logOptions');
     }
-
-    document.getElementById('featureCat').addEventListener('change', e => {
+    document.getElementById('featureCat').addEventListener('change',e=>{
       document.getElementById('railFeatureFields').style.display   = e.target.value==='rail'     ? 'block':'none';
       document.getElementById('offtrackFields').style.display      = e.target.value==='offtrack' ? 'block':'none';
       document.getElementById('otherRailFeatFields').style.display = e.target.value==='otherrail'? 'block':'none';
     });
-
-    function storeFeature() {
-      const cat = document.getElementById('featureCat').value;
-      let entry = { category:cat, chainage:0 };
-      if (cat==='rail') {
-        const km = parseFloat(document.getElementById('featKm').value)||0,
-              m  = parseFloat(document.getElementById('featM').value)||0;
-        entry.pos      = document.getElementById('featRailPos').value;
-        entry.type     = document.getElementById('featType').value;
-        entry.comments = document.getElementById('featComments').value;
-        entry.chainage = km*1000 + m;
-      } else if (cat==='offtrack') {
-        const km = parseFloat(document.getElementById('offKm').value)||0,
-              m  = parseFloat(document.getElementById('offM').value)||0;
-        entry.desc     = document.getElementById('offDesc').value;
-        entry.chainage = km*1000 + m;
+    function storeFeature(){
+      const cat=document.getElementById('featureCat').value;
+      let entry={category:cat,chainage:0};
+      if(cat==='rail'){
+        const km=+document.getElementById('featKm').value||0,
+              m=+document.getElementById('featM').value||0;
+        entry.pos=document.getElementById('featRailPos').value;
+        entry.type=document.getElementById('featType').value;
+        entry.comments=document.getElementById('featComments').value;
+        entry.chainage=km*1000+m;
+      } else if(cat==='offtrack'){
+        const km=+document.getElementById('offKm').value||0,
+              m=+document.getElementById('offM').value||0;
+        entry.desc=document.getElementById('offDesc').value;
+        entry.chainage=km*1000+m;
       } else {
-        const km = parseFloat(document.getElementById('otherFeatKm').value)||0,
-              m  = parseFloat(document.getElementById('otherFeatM').value)||0;
-        entry.rail     = document.getElementById('otherFeatRail').value;
-        entry.type     = document.getElementById('otherFeatType').value;
-        entry.comments = document.getElementById('otherFeatComments').value;
-        entry.chainage = km*1000 + m;
+        const km=+document.getElementById('otherFeatKm').value||0,
+              m=+document.getElementById('otherFeatM').value||0;
+        entry.rail=document.getElementById('otherFeatRail').value;
+        entry.type=document.getElementById('otherFeatType').value;
+        entry.comments=document.getElementById('otherFeatComments').value;
+        entry.chainage=km*1000+m;
       }
       survey.logs.push(entry);
-      drawSketch();
-      showPage('logOptions');
+      saveSurvey(); drawSketch(); showPage('logOptions');
     }
 
-    function confirmClose() {
-      if (confirm('Proceed to close and save this survey?')) {
-        alert('Survey saved.');
-        showPage('startPage');
-      }
+    // Save & Exit
+    function saveAndExit(){
+      saveSurvey();
+      alert('Survey saved.');
+      showPage('homePage');
     }
 
-    function drawSketch() {
-      const c     = document.getElementById('sketch'),
-            ctx   = c.getContext('2d'),
-            s     = parseFloat(document.getElementById('scaleInput').value)||20,
-            m     = 100,
-            start = survey.info.start,
-            end   = survey.info.end,
-            len   = end - start,
-            w     = m*2 + len*s,
-            h     = 600;
-      c.width = w; c.height = h;
-      ctx.fillStyle = '#fff'; ctx.fillRect(0,0,w,h);
+    // Export CSV
+    function exportData(){
+      const infoRows=[
+        ['Units',survey.info.units],
+        ['Project',survey.info.project],
+        ['ELR',survey.info.elr],
+        ['Track ID',survey.info.trackId],
+        ['Survey Name',survey.info.surveyName],
+        ['Start Chainage (m)',survey.info.start],
+        ['End Chainage (m)',survey.info.end],
+        []
+      ];
+      const headers=Array.from(new Set(survey.logs.flatMap(e=>Object.keys(e))));
+      const dataRows=survey.logs.map(e=>headers.map(h=>e[h]||''));
+      const all=[...infoRows,[...headers],...dataRows]
+        .map(r=>r.map(v=>`"${(''+v).replace(/"/g,'""')}"`).join(',')).join('\n');
+      const blob=new Blob([all],{type:'text/csv'});
+      const url=URL.createObjectURL(blob), a=document.createElement('a');
+      a.href=url; a.download=(survey.info.surveyName||'survey').replace(/\s+/g,'_')+'_data.csv';
+      document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
 
-      const yCess     = 80,
-            ySleepTop = 140,
-            yTrack1   = 260,
-            yTrack2   = 310,
-            ySleepBot = 380,
-            y6ft      = 430;
+    // Download PNG
+    function downloadSketchImage(){
+      document.getElementById('sketch').toBlob(blob=>{
+        const url=URL.createObjectURL(blob), a=document.createElement('a');
+        a.href=url; a.download=(survey.info.surveyName||'sketch').replace(/\s+/g,'_')+'.png';
+        document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      });
+    }
 
-      function drawArrows(y, color) {
-        ctx.fillStyle = color;
+    // Drawing routine (with segment breaks, ticks, features, etc.)
+    function drawSketch(){
+      const c=document.getElementById('sketch'), ctx=c.getContext('2d'),
+            s=parseFloat(document.getElementById('scaleInput').value)||20,
+            m=100, start=survey.info.start||0, end=survey.info.end||0,
+            len=end-start, w=m*2+len*s, h=600;
+      c.width=w; c.height=h; ctx.fillStyle='#fff'; ctx.fillRect(0,0,w,h);
+
+      const yCess=80, ySleepTop=140, yTrack1=260,
+            yTrack2=310, ySleepBot=380, y6ft=430;
+
+      function drawArrows(y,color){
+        ctx.fillStyle=color;
         ctx.beginPath(); ctx.moveTo(m,y-5); ctx.lineTo(m-10,y); ctx.lineTo(m,y+5); ctx.fill();
         ctx.beginPath(); ctx.moveTo(w-m,y-5); ctx.lineTo(w-m+10,y); ctx.lineTo(w-m,y+5); ctx.fill();
-        ctx.font='10px Arial'; ctx.fillText(`${start}m`, m-15, y-8);
-        ctx.fillText(`${end}m`, w-m+5, y-8);
+        ctx.font='10px Arial'; ctx.fillText(`${start}m`,m-15,y-8); ctx.fillText(`${end}m`,w-m+5,y-8);
       }
-      drawArrows(yCess,   'red');
-      drawArrows(y6ft,    'red');
-      drawArrows(ySleepTop,'steelblue');
-      drawArrows(ySleepBot,'steelblue');
+      drawArrows(yCess,'red'); drawArrows(y6ft,'red');
+      drawArrows(ySleepTop,'steelblue'); drawArrows(ySleepBot,'steelblue');
 
-      // rail lines
       ctx.strokeStyle='#000'; ctx.lineWidth=2;
-      ctx.beginPath(); ctx.moveTo(m,yTrack1); ctx.lineTo(w-m,yTrack1); ctx.stroke();
-      ctx.fillText('CESS', m-50, yTrack1-5);
-      ctx.beginPath(); ctx.moveTo(m,yTrack2); ctx.lineTo(w-m,yTrack2); ctx.stroke();
-      ctx.fillText('6 ft', m-50, yTrack2-5);
+      [[yTrack1,'CESS'],[yTrack2,'6 ft']].forEach(([y,label])=>{
+        ctx.beginPath(); ctx.moveTo(m,y); ctx.lineTo(w-m,y); ctx.stroke();
+        ctx.fillText(label,m-50,y-5);
+      });
 
-      // drawSegments as before
-      function drawSegments(y, filter, fields, color) {
-        const pts = survey.logs.filter(filter)
-                       .sort((a,b)=>a.chainage-b.chainage)
-                       .map(e=>({chain:e.chainage,label:fields.map(f=>e[f]||'').join(' | ')}));
-        if (!pts.length) return;
+      function drawSegments(y,filter,fields,color){
+        const pts=survey.logs.filter(filter).sort((a,b)=>a.chainage-b.chainage)
+                   .map(e=>({c:e.chainage,l:fields.map(f=>e[f]||'').join(' | ')}));
+        if(!pts.length) return;
         pts.forEach((pt,i)=>{
-          const a = pt.chain,
-                b = i+1<pts.length? pts[i+1].chain : end,
-                xs = m+(a-start)*s,
-                xe = m+(b-start)*s;
-          // bar
+          const a=pt.c, b=i+1<pts.length?pts[i+1].c:end,
+                xs=m+(a-start)*s, xe=m+(b-start)*s;
+          // segment bar
           ctx.strokeStyle=color; ctx.lineWidth=4;
           ctx.beginPath(); ctx.moveTo(xs,y); ctx.lineTo(xe,y); ctx.stroke();
-          // breaks
+          // break ticks
           ctx.strokeStyle=color; ctx.lineWidth=1;
           [xs,xe].forEach(x=>{
             ctx.beginPath(); ctx.moveTo(x,y-6); ctx.lineTo(x,y+6); ctx.stroke();
           });
           // label
           ctx.fillStyle=color; ctx.font='10px Arial';
-          const tw=ctx.measureText(pt.label).width;
-          ctx.fillText(pt.label,(xs+xe)/2 - tw/2,y-8);
+          const tw=ctx.measureText(pt.l).width;
+          ctx.fillText(pt.l,(xs+xe)/2-tw/2,y-8);
         });
       }
 
-      // running rails
       drawSegments(yCess,
         e=>e.category==='runningRails'&&(e.pos==='CESS'||e.pos==='Both'),
         ['section','type','comments'],'red'
@@ -408,7 +452,6 @@
         e=>e.category==='runningRails'&&(e.pos==='6ft'||e.pos==='Both'),
         ['section','type','comments'],'red'
       );
-      // sleepers
       drawSegments(ySleepTop,
         e=>e.category==='sleeper',
         ['type','generalComments','baseComments','clipComments'],'steelblue'
@@ -418,20 +461,17 @@
         ['type','generalComments','baseComments','clipComments'],'steelblue'
       );
 
-      // rail features
+      // features
       survey.logs.filter(e=>e.category==='rail').forEach(e=>{
         const x=m+(e.chainage-start)*s,
               y=e.pos==='CESS'?yTrack1:(e.pos==='6ft'?yTrack2:(yTrack1+yTrack2)/2);
-        ctx.fillStyle='blue';
-        ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.fill();
+        ctx.fillStyle='blue'; ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.fill();
         ctx.save(); ctx.translate(x,y+12); ctx.rotate(-Math.PI/2);
         ctx.fillText(e.type,0,0); ctx.restore();
       });
-      // offtrack
       survey.logs.filter(e=>e.category==='offtrack').forEach(e=>{
         const x=m+(e.chainage-start)*s, y=ySleepBot+30;
-        ctx.fillStyle='green';
-        ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.fill();
+        ctx.fillStyle='green'; ctx.beginPath(); ctx.arc(x,y,4,0,2*Math.PI); ctx.fill();
         ctx.save(); ctx.translate(x,y+12); ctx.rotate(-Math.PI/2);
         ctx.fillText(e.desc,0,0); ctx.restore();
       });
@@ -441,7 +481,7 @@
       for(let cg=start;cg<=end;cg+=10){
         const x=m+(cg-start)*s,
               y0=y6ft+60,
-              y1=y0 + (cg%50===0?12:6);
+              y1=y0+(cg%50===0?12:6);
         ctx.beginPath(); ctx.moveTo(x,y0); ctx.lineTo(x,y1); ctx.stroke();
         if(cg%50===0){
           ctx.fillStyle='#000'; ctx.font='8px Arial';
@@ -450,54 +490,11 @@
       }
     }
 
-    // new exportData → CSV
-    function exportData() {
-      // survey.info rows
-      const infoRows = [
-        ['Units', survey.info.units],
-        ['Project', survey.info.project],
-        ['ELR', survey.info.elr],
-        ['Track ID', survey.info.trackId],
-        ['Survey Name', survey.info.surveyName],
-        ['Start Chainage (m)', survey.info.start],
-        ['End Chainage (m)', survey.info.end],
-        []
-      ];
-      // collect headers from logs
-      const headersSet = new Set();
-      survey.logs.forEach(e => Object.keys(e).forEach(k => headersSet.add(k)));
-      const headers = Array.from(headersSet);
-      // data rows
-      const dataRows = survey.logs.map(entry => {
-        return headers.map(h => entry[h] != null ? entry[h] : '');
-      });
-      // build CSV string
-      const allRows = infoRows.concat([headers]).concat(dataRows);
-      const csv = allRows.map(r => r.map(v=>`"${(''+v).replace(/"/g,'""')}"`).join(',')).join('\n');
-      const blob = new Blob([csv], { type:'text/csv' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      const name = survey.info.surveyName ? survey.info.surveyName.replace(/\s+/g,'_') : 'survey';
-      a.download = `${name}_data.csv`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    // new downloadSketchImage → PNG
-    function downloadSketchImage() {
-      const canvas = document.getElementById('sketch');
-      const dataURL = canvas.toDataURL('image/png');
-      const a = document.createElement('a');
-      a.href = dataURL;
-      const name = survey.info.surveyName ? survey.info.surveyName.replace(/\s+/g,'_') : 'sketch';
-      a.download = `${name}.png`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }
+    // On initial load: choose home vs. start
+    window.addEventListener('DOMContentLoaded', ()=>{
+      if (localStorage.getItem('trackSurveyData')) showPage('homePage');
+      else showPage('startPage');
+    });
   </script>
 
 </body>
